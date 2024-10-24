@@ -1,0 +1,35 @@
+cabal-version:      3.0
+
+name:               break-words
+version:            0.1.0.0
+synopsis:           Find word breaks in text containing no spaces
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Neil Mayhew
+maintainer:         neil@mayhew.name
+copyright:          2024
+build-type:         Simple
+
+common warnings
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wpartial-fields
+    -Wredundant-constraints
+    -Werror
+
+executable break-words
+  import:           warnings
+  main-is:          Main.hs
+  other-modules:    BreakWords
+  default-language: Haskell2010
+  other-extensions:
+    ApplicativeDo
+    RecordWildCards
+  build-depends:
+    base >=4.14,
+    containers >=0.6,
+    optparse-applicative >=0.16,
+    terminal-size >=0.3,
+    word-trie >=0.3,
