@@ -30,6 +30,8 @@ executable break-words
   build-depends:
     base >=4.14,
     containers >=0.6,
+    deepseq >=1.4,
     optparse-applicative >=0.16,
     terminal-size >=0.3,
+    time >=1.9,
     word-trie >=0.3,
