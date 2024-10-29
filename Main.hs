@@ -1,5 +1,7 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Main where
@@ -11,6 +13,9 @@ import Control.Exception
 import Control.Monad
 import Data.Char
 import Data.Foldable
+import Data.GraphViz
+import Data.GraphViz.Attributes.Complete hiding (value)
+import Data.Set (Set)
 import Data.Time
 import Data.Time.Clock.POSIX
 import Data.Tree
@@ -18,16 +23,22 @@ import Data.Trie
 import Options.Applicative
 import System.IO
 
+import qualified Data.Set as Set
+import qualified Data.Text.Lazy.IO as T
 import qualified System.Console.Terminal.Size as TS
 
 data Options = Options
   { optInputFiles :: [FilePath]
   , optWordListFile :: FilePath
   , optVerbose :: Bool
-  , optTree :: Bool
+  , optOutputStyle :: OutputStyle
   , optDemo :: Bool
   }
   deriving (Show)
+
+data OutputStyle
+  = List | Tree | Graph
+  deriving (Eq, Ord, Enum, Bounded, Read, Show)
 
 main :: IO ()
 main = do
@@ -47,9 +58,22 @@ main = do
           optVerbose <- switch $
             short 'v' <> long "verbose" <>
             help "Show extra information on stderr"
-          optTree <- switch $
-            long "tree" <>
-            help "Display the parsing results as a tree"
+          optOutputStyle <-
+            flag' List
+            (
+              long "list" <>
+              help "Display the parsing results as a list"
+            ) <|>
+            flag' Tree
+            (
+              long "tree" <>
+              help "Display the parsing results as a tree"
+            ) <|>
+            flag' Graph
+            (
+              long "graph" <>
+              help "Display the parsing results as a graph"
+            )
           optDemo <- switch $
             long "demo" <>
             help "Use the built-in demonstration input"
@@ -78,9 +102,10 @@ main = do
       parsing <- timeEval numParses
       verbose $ show numParses <> " parses in " <> show parsing
       displaying <- timeExecute $
-        if optTree
-          then putStr . drawTree $ Node "" parses
-          else mapM_ (putStrLn . unwords) paths
+        case optOutputStyle of
+          List -> mapM_ (putStrLn . unwords) paths
+          Tree -> putStr . drawTree $ Node "" parses
+          Graph -> T.putStr . printDotGraph $ treeGraph parses
       verbose $ "Output produced in " <> show displaying
 
   preparation <- timeEval dict
@@ -91,6 +116,29 @@ main = do
 
   for_ optInputFiles $
     process <=< readFile
+
+treeGraph :: Forest String -> DotGraph Int
+treeGraph parses =
+  let
+    edges = Set.toList $ treeEdges parses
+    nodes = map (\n -> (n, show n)) . nub' . concatMap (\(n1, n2, _) -> [n1, n2]) $ edges
+    nub' = Set.toList . Set.fromList
+    params = quickParams
+      { globalAttributes =
+        [ GraphAttrs [RankDir FromLeft, Margin (DVal 0), Splines SplineEdges]
+        , NodeAttrs [Shape Circle, FontName "Helvetica"]
+        , EdgeAttrs [FontName "Helvetica"]
+        ]
+      }
+  in
+    graphElemsToDot params nodes edges
+
+treeEdges :: Forest String -> Set (Int, Int, String)
+treeEdges = Set.unions . map (go 0)
+  where
+    go i t =
+      let l = rootLabel t
+       in Set.insert (i, i + length l, l) . Set.unions $ go (i + length l) <$> subForest t
 
 treePaths :: Tree String -> [[String]]
 treePaths = foldTree go
