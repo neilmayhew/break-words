@@ -10,7 +10,14 @@ type Edge = Int
 
 breakWords :: Trie -> String -> [(Node, [Edge])]
 breakWords dict blob =
-    [(node, [edge | edge <- edges !! node, (node + edge) `Set.member` (nodes !! 0)]) | node <- Set.toList $ nodes !! 0]
+    [ ( node,
+        [ edge
+        | edge <- edges !! node
+        , (node + edge) `Set.member` head nodes
+        ]
+      )
+    | node <- Set.toList $ head nodes
+    ]
   where
     l = length blob
     edges = map (splitHeads dict) (tails blob)
