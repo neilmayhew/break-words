@@ -15,15 +15,12 @@ import Data.Char
 import Data.Foldable
 import Data.GraphViz
 import Data.GraphViz.Attributes.Complete hiding (value)
-import Data.Set (Set)
 import Data.Time
 import Data.Time.Clock.POSIX
-import Data.Tree
 import Data.Trie
 import Options.Applicative
 import System.IO
 
-import qualified Data.Set as Set
 import qualified Data.Text.Lazy.IO as T
 import qualified System.Console.Terminal.Size as TS
 
@@ -31,14 +28,9 @@ data Options = Options
   { optInputFiles :: [FilePath]
   , optWordListFile :: FilePath
   , optVerbose :: Bool
-  , optOutputStyle :: OutputStyle
   , optDemo :: Bool
   }
   deriving (Show)
-
-data OutputStyle
-  = List | Tree | Graph
-  deriving (Eq, Ord, Enum, Bounded, Read, Show)
 
 main :: IO ()
 main = do
@@ -58,22 +50,6 @@ main = do
           optVerbose <- switch $
             short 'v' <> long "verbose" <>
             help "Show extra information on stderr"
-          optOutputStyle <-
-            flag' List
-            (
-              long "list" <>
-              help "Display the parsing results as a list"
-            ) <|>
-            flag' Tree
-            (
-              long "tree" <>
-              help "Display the parsing results as a tree"
-            ) <|>
-            flag' Graph
-            (
-              long "graph" <>
-              help "Display the parsing results as a graph"
-            )
           optDemo <- switch $
             long "demo" <>
             help "Use the built-in demonstration input"
@@ -97,15 +73,11 @@ main = do
       let
         blob = filter isAlpha . map toLower $ input
         parses = breakWords dict blob
-        numParses = sum $ map treeSize parses
-        paths = concatMap treePaths parses
-      parsing <- timeEval numParses
-      verbose $ show numParses <> " parses in " <> show parsing
+        numEdges = sum $ map (length . snd) parses
+      parsing <- timeEval numEdges
+      verbose $ show numEdges <> " words in " <> show parsing
       displaying <- timeExecute $
-        case optOutputStyle of
-          List -> mapM_ (putStrLn . unwords) paths
-          Tree -> putStr . drawTree $ Node "" parses
-          Graph -> T.putStr . printDotGraph $ treeGraph parses
+        T.putStr . printDotGraph $ treeGraph blob parses
       verbose $ "Output produced in " <> show displaying
 
   preparation <- timeEval dict
@@ -117,12 +89,12 @@ main = do
   for_ optInputFiles $
     process <=< readFile
 
-treeGraph :: Forest String -> DotGraph Int
-treeGraph parses =
+treeGraph :: String -> [(Node, [Edge])] -> DotGraph Int
+treeGraph blob parses =
   let
-    edges = Set.toList $ treeEdges parses
-    nodes = map (\n -> (n, show n)) . nub' . concatMap (\(n1, n2, _) -> [n1, n2]) $ edges
-    nub' = Set.toList . Set.fromList
+    nodes = [(n, show n) | (n, _) <- parses]
+    edges = [(n, n + e, substring n e) | (n, es) <- parses, e <- es]
+    substring n e = take e (drop n blob)
     params = quickParams
       { globalAttributes =
         [ GraphAttrs [RankDir FromLeft, Margin (DVal 0), Splines SplineEdges]
@@ -132,23 +104,6 @@ treeGraph parses =
       }
   in
     graphElemsToDot params nodes edges
-
-treeEdges :: Forest String -> Set (Int, Int, String)
-treeEdges = Set.unions . map (go 0)
-  where
-    go i t =
-      let l = rootLabel t
-       in Set.insert (i, i + length l, l) . Set.unions $ go (i + length l) <$> subForest t
-
-treePaths :: Tree String -> [[String]]
-treePaths = foldTree go
-  where
-    go :: String -> [[[String]]] -> [[String]]
-    go label [] = [[label]]
-    go label subpaths = map (label:) $ concat subpaths
-
-treeSize :: Tree String -> Int
-treeSize = foldTree $ \_ bs -> sum bs + fromEnum (null bs)
 
 timeEval :: NFData a => a -> IO NominalDiffTime
 timeEval = timeExecute . pure

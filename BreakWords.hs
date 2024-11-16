@@ -1,21 +1,30 @@
 module BreakWords where
 
-import Data.Bifunctor
-import Data.Tree
+import Data.List (tails)
 import Data.Trie
 
-breakWords :: Trie -> String -> Forest String
-breakWords dict blob =
-  [ Node w ws
-  | (w, rest) <- splitHeads dict blob
-  , let ws = breakWords dict rest
-  , null rest || not (null ws)
-  ]
+import qualified Data.Set as Set
 
-splitHeads :: Trie -> String -> [(String, String)]
+type Node = Int
+type Edge = Int
+
+breakWords :: Trie -> String -> [(Node, [Edge])]
+breakWords dict blob =
+    [(node, [edge | edge <- edges !! node, (node + edge) `Set.member` (nodes !! 0)]) | node <- Set.toList $ nodes !! 0]
+  where
+    l = length blob
+    edges = map (splitHeads dict) (tails blob)
+    nodes = map go [0 .. l]
+    go n =
+       let subnodes = Set.unions [nodes !! (n + edge) | edge <- edges !! n]
+       in if n == l || not (null subnodes)
+            then Set.insert n subnodes
+            else subnodes
+
+splitHeads :: Trie -> String -> [Int]
 splitHeads t (c : cs)
   | Just t' <- lookupPrefix [c] t =
-      (first (c :) <$> splitHeads t' cs) ++ [([c], cs) | atBreak t']
+      [1 | atBreak t'] ++ (succ <$> splitHeads t' cs)
 splitHeads _ _ = []
 
 -- There should be a function that tests for `Trie True _`.
