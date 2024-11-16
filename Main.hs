@@ -27,6 +27,7 @@ import qualified System.Console.Terminal.Size as TS
 data Options = Options
   { optInputFiles :: [FilePath]
   , optWordListFile :: FilePath
+  , optOutputFile :: Maybe FilePath
   , optVerbose :: Bool
   , optDemo :: Bool
   }
@@ -46,6 +47,11 @@ main = do
             metavar "WORDS" <>
             value "words.txt" <>
             help "A dictionary containing one word per line" <>
+            showDefaultWith id
+          optOutputFile <- optional . strOption $
+            short 'o' <> long "output" <>
+            metavar "FILE" <>
+            help "Write output to FILE instead of stdout" <>
             showDefaultWith id
           optVerbose <- switch $
             short 'v' <> long "verbose" <>
@@ -74,10 +80,11 @@ main = do
         blob = filter isAlpha . map toLower $ input
         parses = breakWords dict blob
         numEdges = sum $ map (length . snd) parses
+        writeOutput = maybe T.putStr T.writeFile optOutputFile
       parsing <- timeEval numEdges
       verbose $ show numEdges <> " words in " <> show parsing
       displaying <- timeExecute $
-        T.putStr . printDotGraph $ treeGraph blob parses
+        writeOutput . printDotGraph $ treeGraph blob parses
       verbose $ "Output produced in " <> show displaying
 
   preparation <- timeEval dict
